@@ -10,6 +10,10 @@
 python3 -m http.server 8000
 ```
 
+## Деплой
+
+Каждый пуш в `main` публикует сайт на GitHub Pages: https://djeda1.github.io/nfc_track/ (workflow `.github/workflows/pages.yml`).
+
 ## Файлы
 
 - `index.html` — готовая страница.
