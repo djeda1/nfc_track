@@ -1,0 +1,1264 @@
+<title>NOIR Card</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="NOIR — бесконтактная NFC-карта. Оплачивай всё одним касанием, данные под защитой чипа.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tiny5&family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: four hairline columns run the full page; copy lives in the centre column.
+   Dark "ink" bands and light "paper" bands alternate, joined by pixel-dissolve seams.
+   One WebGL card floats above everything and travels between DOM anchors as you scroll. */
+:root{
+  --ink:#0e0f13;
+  --ink-2:#17181e;
+  --ink-3:#22242c;
+  --paper:#e6e7eb;
+  --paper-2:#d7d9df;
+  --signal:#5b7cff;
+  --signal-hi:#b4c3ff;
+  --on-ink:#eceef4;
+  --on-ink-mute:#8b8f9c;
+  --on-paper:#121318;
+  --on-paper-mute:#5a5e6a;
+  --f-px:"Tiny5","Courier New",ui-monospace,monospace;
+  --f-body:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --vh:1vh;
+  --col:clamp(270px,24vw,430px);
+  --gut:max(16px,env(safe-area-inset-left,0px));
+  --gut-r:max(16px,env(safe-area-inset-right,0px));
+  --pw:min(300px,64vw,calc(var(--vh)*40));
+  color-scheme:dark;
+}
+@media (max-width:820px){
+  :root{ --col:calc((100vw - 32px)/3); }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{background:var(--ink);-webkit-text-size-adjust:100%}
+body{background:var(--ink);color:var(--on-ink);font-family:var(--f-body);font-size:15px;line-height:1.5;overflow-x:clip;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+html.lenis,html.lenis body{height:auto}
+.lenis.lenis-smooth{scroll-behavior:auto!important}
+::selection{background:var(--signal);color:#fff}
+a{color:inherit}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--signal);outline-offset:3px}
+
+/* ---------- fixed layers ---------- */
+#gl{position:fixed;inset:0;width:100%;height:100%;z-index:6;pointer-events:none;display:block}
+#trail{position:fixed;inset:0;width:100%;height:100%;z-index:12;pointer-events:none;mix-blend-mode:difference}
+.lines{position:fixed;inset:0;z-index:1;pointer-events:none;mix-blend-mode:difference;opacity:.085;
+  background:
+   linear-gradient(#fff,#fff) calc(50% - var(--col)*1.5) 0/1px 100% no-repeat,
+   linear-gradient(#fff,#fff) calc(50% - var(--col)*.5) 0/1px 100% no-repeat,
+   linear-gradient(#fff,#fff) calc(50% + var(--col)*.5) 0/1px 100% no-repeat,
+   linear-gradient(#fff,#fff) calc(50% + var(--col)*1.5) 0/1px 100% no-repeat}
+.topblur{position:fixed;inset:0 0 auto;height:clamp(90px,15vh,140px);z-index:8;pointer-events:none}
+.topblur i{position:absolute;inset:0;display:block;--side:linear-gradient(90deg,transparent,#000 56px,#000 calc(100% - 56px),transparent);-webkit-mask-composite:source-in;mask-composite:intersect}
+.topblur i:nth-child(1){backdrop-filter:blur(1px);-webkit-backdrop-filter:blur(1px);-webkit-mask-image:linear-gradient(#000 0,#000 60%,transparent 100%),var(--side);mask-image:linear-gradient(#000 0,#000 60%,transparent 100%),var(--side)}
+.topblur i:nth-child(2){backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);-webkit-mask-image:linear-gradient(#000 0,#000 40%,transparent 80%),var(--side);mask-image:linear-gradient(#000 0,#000 40%,transparent 80%),var(--side)}
+.topblur i:nth-child(3){backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);-webkit-mask-image:linear-gradient(#000 0,#000 25%,transparent 60%),var(--side);mask-image:linear-gradient(#000 0,#000 25%,transparent 60%),var(--side)}
+.topblur i:nth-child(4){backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);-webkit-mask-image:linear-gradient(#000 0,transparent 40%),var(--side);mask-image:linear-gradient(#000 0,transparent 40%),var(--side)}
+.hdr{position:fixed;top:0;left:0;right:0;z-index:9;display:flex;justify-content:center;padding-top:calc(env(safe-area-inset-top,0px) + 22px);padding-left:var(--gut);padding-right:var(--gut-r);pointer-events:none;mix-blend-mode:difference}
+.logo{pointer-events:auto;font-family:var(--f-px);font-size:22px;letter-spacing:.08em;color:#fff;text-decoration:none;line-height:1}
+
+/* ---------- phone (fixed, driven by scroll) ---------- */
+.phone{position:fixed;top:0;left:50%;z-index:5;width:var(--pw);height:calc(var(--pw)*2.05);margin-left:calc(var(--pw)/-2);visibility:hidden;will-change:transform;font-size:calc(var(--pw)*.043)}
+.phone-body{position:absolute;inset:0;border-radius:calc(var(--pw)*.16);background:linear-gradient(145deg,#3a3c45,#121318 40%,#2a2c33 75%,#0b0c0f);padding:calc(var(--pw)*.028);box-shadow:0 40px 80px -30px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.06) inset}
+.phone-body::before,.phone-body::after{content:"";position:absolute;width:3px;background:#2a2c33;border-radius:2px}
+.phone-body::before{left:-3px;top:22%;height:7%}
+.phone-body::after{right:-3px;top:28%;height:11%}
+.screen{position:relative;width:100%;height:100%;border-radius:calc(var(--pw)*.135);background:#121318;overflow:hidden;color:#e8eaf0;display:flex;flex-direction:column;padding:0 .9em}
+.island{position:absolute;top:.75em;left:50%;width:30%;height:1.9em;margin-left:-15%;border-radius:1em;background:#000;z-index:2}
+.status{display:flex;justify-content:space-between;align-items:center;height:3.4em;padding:0 .7em;font-weight:600;font-size:.95em}
+.status .ic{display:flex;gap:.35em;align-items:center}
+.bars{display:flex;gap:2px;align-items:flex-end;height:.8em}
+.bars i{display:block;width:3px;background:#e8eaf0;border-radius:1px}
+.bars i:nth-child(1){height:35%}.bars i:nth-child(2){height:55%}.bars i:nth-child(3){height:75%}.bars i:nth-child(4){height:100%}
+.batt{width:1.7em;height:.8em;border:1.5px solid #e8eaf0;border-radius:3px;padding:1px;position:relative}
+.batt::after{content:"";display:block;height:100%;width:72%;background:#e8eaf0;border-radius:1px}
+.app-top{display:flex;align-items:center;gap:.5em;margin:.4em 0 .9em}
+.ava,.gridbtn{width:2.2em;height:2.2em;border-radius:50%;background:#22242c;flex:none;display:grid;place-items:center}
+.ava::after{content:"";width:.8em;height:.8em;border-radius:50%;background:#5c606d}
+.gridbtn{border-radius:.7em}
+.gridbtn::after{content:"";width:.85em;height:.85em;background:conic-gradient(#8b8f9c 0 25%,transparent 0 50%,#8b8f9c 0 75%,transparent 0) 0 0/50% 50%}
+.search{flex:1;height:2.2em;border-radius:1.1em;background:#22242c;color:#6d717e;display:flex;align-items:center;padding:0 .9em;font-size:.95em}
+.phone-card{width:100%;aspect-ratio:1000/630;border-radius:.6em;flex:none;background:#191a20;box-shadow:inset 0 0 0 1px #22242c}
+.bal{display:flex;justify-content:space-between;align-items:baseline;margin:1em .2em .6em;font-size:.9em;color:#8b8f9c}
+.bal b{font-family:var(--f-mono);font-weight:500;color:#e8eaf0;font-size:1.05em}
+.tx{list-style:none;margin:0;padding:0;display:grid;gap:.15em}
+.tx li{display:grid;grid-template-columns:2.2em 1fr auto;align-items:center;gap:.6em;padding:.45em .2em;font-size:.88em;border-top:1px solid #1d1f26}
+.tx li i{width:2.2em;height:2.2em;border-radius:.6em;background:#1d1f26;display:grid;place-items:center;font-style:normal;font-family:var(--f-px);color:var(--signal-hi);font-size:.95em}
+.tx li span small{display:block;color:#6d717e;font-size:.85em}
+.tx li b{font-family:var(--f-mono);font-weight:500}
+.tabbar{margin-top:auto;display:flex;justify-content:center;align-items:center;gap:.6em;padding-bottom:2.2em}
+.tabs{display:flex;background:#22242c;border-radius:2em;padding:.25em}
+.tabs span{padding:.45em 1em;border-radius:2em;font-size:.8em;color:#8b8f9c}
+.tabs span.on{background:#33363f;color:#e8eaf0}
+.plus{width:2.6em;height:2.6em;border-radius:50%;background:#22242c;display:grid;place-items:center;font-size:1.2em}
+.homebar{position:absolute;bottom:.7em;left:50%;width:36%;height:4px;margin-left:-18%;border-radius:3px;background:#e8eaf0;opacity:.85}
+
+/* ---------- bands ---------- */
+main{position:relative}
+.band{position:relative}
+.ink{background:var(--ink);color:var(--on-ink);--mute:var(--on-ink-mute);--fg:var(--on-ink);--bg:var(--ink)}
+.paper{background:var(--paper);color:var(--on-paper);--mute:var(--on-paper-mute);--fg:var(--on-paper);--bg:var(--paper)}
+.edge{position:absolute;left:0;bottom:100%;width:100%;display:block;pointer-events:none}
+.col{width:var(--col);max-width:calc(100vw - 32px);margin:0 auto}
+.px{font-family:var(--f-px);font-weight:400;letter-spacing:.02em;line-height:1.08;text-transform:uppercase;white-space:pre-line;text-wrap:balance;margin:0}
+.h-xl{font-size:clamp(30px,3.1vw,50px)}
+.h-l{font-size:clamp(26px,2.35vw,38px)}
+.lead{color:var(--mute);font-size:14.5px;line-height:1.55;margin:0}
+.stage{position:sticky;top:0;height:calc(var(--vh)*100);overflow:hidden}
+.anchor{aspect-ratio:1000/630;max-width:100%;pointer-events:none}
+
+/* hero */
+.hero{min-height:calc(var(--vh)*100);display:flex;flex-direction:column;align-items:center;justify-content:center;padding-block:calc(var(--vh)*13) calc(var(--vh)*7);padding-left:var(--gut);padding-right:var(--gut-r);gap:clamp(28px,6vh,64px);text-align:center}
+#a-hero{width:min(44vw,680px,calc(var(--vh)*82))}
+.hero .sub{font-family:var(--f-mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin:14px 0 0}
+
+/* story stage */
+.story{height:calc(var(--vh)*560)}
+#a-story{position:absolute;left:50%;top:calc(var(--vh)*14);width:min(32vw,440px,calc(var(--vh)*52));transform:translateX(-50%)}
+.slot{position:absolute;left:0;right:0;margin:0 auto;width:var(--col);max-width:calc(100vw - 32px);text-align:center;display:grid;gap:14px;justify-items:center}
+.slot.below{top:calc(var(--vh)*14 + min(32vw,440px,calc(var(--vh)*52))*.63 + var(--vh)*6)}
+.slot.mid{top:50%;margin-top:-80px}
+.slot .lead{max-width:36ch}
+#t2,#t3{opacity:0}
+
+/* phone sections */
+.mine{height:calc(var(--vh)*220)}
+.mine .stage{display:flex;justify-content:center}
+.mine-h{position:absolute;top:calc(var(--vh)*13);left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100vw - 32px);text-align:center;opacity:0}
+.mine-h p{margin:0}
+.mine-h p+p{margin-top:.9em}
+.every{height:calc(var(--vh)*380)}
+.slide{position:absolute;top:calc(var(--vh)*11);left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100vw - 32px);text-align:center;display:grid;gap:12px;justify-items:center}
+.slide .lead{font-size:13px}
+.floater{position:absolute;opacity:0;image-rendering:pixelated;pointer-events:none}
+
+/* demo */
+.demo{min-height:calc(var(--vh)*150);display:flex;align-items:center;padding-block:calc(var(--vh)*18) calc(var(--vh)*20)}
+.demo .col{display:grid;gap:22px;justify-items:stretch}
+.demo-top{text-align:center;display:grid;gap:10px}
+.step{font-family:var(--f-px);font-size:20px;color:var(--mute)}
+.field{display:grid;gap:6px}
+.field label,.kv dt{font-size:12px;color:var(--mute)}
+.inwrap{display:flex;align-items:center;border-bottom:1px solid var(--ink-3);padding:6px 0}
+.inwrap input{flex:1;min-width:0;background:transparent;border:0;color:var(--on-ink);font-family:var(--f-mono);font-size:15px;padding:0;outline:none}
+.inwrap span{font-family:var(--f-mono);color:var(--mute);font-size:13px}
+.inwrap:focus-within{border-color:var(--signal)}
+#a-demo{width:100%}
+.limit{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--mute);gap:10px}
+.stepper{display:flex;align-items:center;gap:8px;font-family:var(--f-mono);color:var(--on-ink);font-size:13px}
+.stepper button{width:24px;height:24px;border:1px solid var(--ink-3);background:transparent;cursor:pointer;display:grid;place-items:center;line-height:1}
+.stepper button:hover{border-color:var(--on-ink-mute)}
+#d-form,#d-res-top{min-height:56px;align-content:end}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;margin:0;font-family:var(--f-mono);font-size:13px}
+.kv dd{margin:0;text-align:right}
+.kv dd.ok{color:var(--signal-hi)}
+.note{font-size:13px;color:var(--mute);margin:0}
+
+/* buttons */
+.btn{position:relative;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 22px;font-size:14px;text-decoration:none;cursor:pointer;border:1px solid currentColor;background:transparent;overflow:hidden;isolation:isolate}
+.btn canvas{position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
+.btn span{position:relative;transition:color .2s .1s}
+.btn-out{color:var(--fg)}
+.btn-out:hover span{color:var(--bg)}
+.btn-solid{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn-solid:hover span{color:#fff}
+.btn-px{font-family:var(--f-px);font-size:16px;letter-spacing:.04em;text-transform:uppercase}
+.btn-wide{width:100%}
+
+/* reviews */
+.reviews{height:calc(var(--vh)*320);overflow:hidden}
+.rv{position:absolute;width:min(15vw,220px);aspect-ratio:1;background:var(--ink-2);color:var(--on-ink);padding:14px;display:flex;flex-direction:column;justify-content:space-between;font-size:12.5px;line-height:1.42;z-index:4;will-change:transform}
+.rv p{margin:0}
+.rv cite{font-style:normal;font-size:11px;color:var(--on-ink-mute)}
+.rv-h{position:absolute;top:calc(var(--vh)*10);left:50%;transform:translateX(-50%);text-align:center;width:var(--col);max-width:calc(100vw - 32px);font-size:13px;color:var(--mute);margin:0}
+
+/* faq */
+.faq{padding-block:calc(var(--vh)*20) calc(var(--vh)*18)}
+.faq-grid{width:calc(var(--col)*3);max-width:calc(100vw - 32px);margin:0 auto;display:grid;grid-template-columns:1fr 2fr}
+.faq-side{padding:0 24px 0 0;position:sticky;top:calc(var(--vh)*16);align-self:start;display:grid;gap:14px}
+.faq-side .lead{font-size:13px}
+.faq-side a{color:var(--signal-hi)}
+.qa{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--ink-3)}
+.qa:last-child{border-bottom:1px solid var(--ink-3)}
+.qa h3{margin:0;padding:22px 20px 26px;font-family:var(--f-px);font-weight:400;font-size:17px;line-height:1.2;text-transform:uppercase;letter-spacing:.02em}
+.qa h3::before{content:"“";display:block;font-size:13px;color:var(--signal);margin-bottom:8px}
+.qa p{margin:0;padding:22px 0 26px 20px;color:var(--mute);font-size:13.5px;line-height:1.55;min-width:0}
+
+/* cta */
+.cta{min-height:calc(var(--vh)*100);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(24px,4.5vh,44px);padding-block:calc(var(--vh)*14) calc(var(--vh)*12);padding-left:var(--gut);padding-right:var(--gut-r);text-align:center}
+#a-cta{width:min(36vw,520px,calc(var(--vh)*62))}
+.cta-btns{display:grid;gap:10px;width:min(max(var(--col),280px),100%)}
+.cta .note{color:var(--mute);font-size:12px}
+
+/* footer */
+.foot{padding-top:28px}
+.foot-row{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-left:var(--gut);padding-right:var(--gut-r);font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--on-ink-mute)}
+.foot-row nav{display:flex;gap:20px;flex-wrap:wrap}
+.foot-row a{text-decoration:none}
+.foot-row a:hover{color:var(--on-ink)}
+#mark{display:block;width:100%;margin-top:24px}
+
+@media (max-width:820px){
+  #a-hero{width:84vw}
+  #a-story{width:72vw}
+  .slot.below{top:calc(var(--vh)*14 + 72vw*.63 + var(--vh)*5)}
+  .slot{width:calc(100vw - 32px)}
+  .rv{width:46vw;z-index:7;font-size:12px}
+  .rv-h{width:calc(100vw - 32px)}
+  .faq-grid{grid-template-columns:1fr}
+  .faq-side{position:static;padding:0 0 28px}
+  .qa{grid-template-columns:1fr}
+  .qa h3{padding:20px 0 8px}
+  .qa p{padding:0 0 22px}
+  #a-cta{width:80vw}
+  .col{width:calc(100vw - 32px)}
+}
+@media (prefers-reduced-motion:reduce){
+  .btn span{transition:none}
+}
+</style>
+
+<div class="lines" aria-hidden="true"></div>
+<canvas id="gl" aria-hidden="true"></canvas>
+<canvas id="trail" aria-hidden="true"></canvas>
+<div class="topblur" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+<header class="hdr"><a class="logo" href="#top" aria-label="NOIR, наверх">NOIR</a></header>
+
+<div class="phone" id="phone" aria-hidden="true">
+  <div class="phone-body">
+    <div class="screen">
+      <div class="island"></div>
+      <div class="status"><span>9:41</span><span class="ic"><span class="bars"><i></i><i></i><i></i><i></i></span><span class="batt"></span></span></div>
+      <div class="app-top"><span class="ava"></span><span class="search">Поиск</span><span class="gridbtn"></span></div>
+      <div class="phone-card" id="a-phone"></div>
+      <div class="bal"><span>Баланс</span><b>48 320,00 ₽</b></div>
+      <ul class="tx">
+        <li><i>☕</i><span>Кофейня «Зерно»<small>Касание · 08:12</small></span><b>−320 ₽</b></li>
+        <li><i>M</i><span>Метро<small>Касание · 08:31</small></span><b>−62 ₽</b></li>
+        <li><i>П</i><span>Продукты<small>Касание · 19:04</small></span><b>−1 845 ₽</b></li>
+      </ul>
+      <div class="tabbar"><div class="tabs"><span class="on">Карта</span><span>История</span></div><span class="plus">+</span></div>
+      <div class="homebar"></div>
+    </div>
+  </div>
+</div>
+
+<main>
+  <section class="band ink hero" id="top">
+    <div class="anchor" id="a-hero" data-rx="-0.06" data-ry="0.10"></div>
+    <div>
+      <h1 class="px h-xl" data-scramble>Оплачивай всё&#10;одним касанием</h1>
+      <p class="sub">NFC-карта с защитой на уровне чипа</p>
+    </div>
+  </section>
+
+  <section class="band paper story" id="story">
+    <canvas class="edge"></canvas>
+    <div class="stage">
+      <div class="anchor" id="a-story"></div>
+      <div class="slot below" id="t1">
+        <h2 class="px h-l" data-scramble>Приложи карту&#10;к терминалу</h2>
+        <p class="lead">Кофе, метро, продукты, заправка. Любой терминал со значком бесконтактной оплаты примет NOIR за доли секунды.</p>
+        <p class="lead">Карта и терминал обмениваются данными по NFC на частоте 13,56 МГц. Связь работает только на расстоянии до 4 см, поэтому платёж нельзя провести издалека.</p>
+        <a class="btn btn-out" href="#faq"><span>Как работает защита</span></a>
+      </div>
+      <div class="slot mid" id="t2">
+        <h2 class="px h-l">Каждый платёж&#10;под новым ключом</h2>
+        <p class="lead">Номер карты не уходит продавцу. Чип передаёт токен и одноразовую криптограмму, созданную только для этой покупки. Перехваченные данные нельзя использовать второй раз.</p>
+      </div>
+      <div class="slot below" id="t3">
+        <h2 class="px h-l">Три слоя&#10;защиты</h2>
+        <p class="lead">Ключи хранятся в защищённом элементе чипа и никогда его не покидают. Токен скрывает реальный номер. Крупные суммы подтверждаются PIN-кодом. Чтобы списать деньги, нужны все три.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band ink mine" id="mine">
+    <canvas class="edge"></canvas>
+    <div class="stage">
+      <div class="mine-h px h-l" id="mine-h"><p data-text="Управление&#10;в телефоне">Управление&#10;в телефоне</p><p data-text="Платёж уходит,&#10;данные остаются">Платёж уходит,&#10;данные остаются</p></div>
+    </div>
+  </section>
+
+  <section class="band paper every" id="everywhere">
+    <canvas class="edge"></canvas>
+    <div class="stage">
+      <div class="slide" id="slide">
+        <p class="lead" id="slide-sub">Карта, телефон и часы работают с одного счёта</p>
+        <h2 class="px h-xl" id="slide-h">Без наличных&#10;без очередей&#10;без ожидания</h2>
+      </div>
+      <canvas class="floater" data-icon="wave" data-slide="1" style="left:14%;top:36%"></canvas>
+      <canvas class="floater" data-icon="wave" data-slide="1" style="right:12%;top:52%"></canvas>
+      <canvas class="floater" data-icon="ring" data-slide="2" style="left:12%;top:24%"></canvas>
+      <canvas class="floater" data-icon="ring" data-slide="2" style="right:13%;top:30%"></canvas>
+    </div>
+  </section>
+
+  <section class="band ink demo" id="try">
+    <canvas class="edge"></canvas>
+    <div class="col">
+      <div class="demo-top">
+        <span class="step" id="d-step">1/2</span>
+        <h2 class="px h-l" id="d-h">Настрой оплату</h2>
+      </div>
+      <div id="d-form" class="field">
+        <label for="amount">Сумма покупки</label>
+        <div class="inwrap"><input id="amount" inputmode="numeric" autocomplete="off" value="1 250"><span>₽</span></div>
+      </div>
+      <dl class="kv" id="d-res-top" hidden>
+        <dt>Токен</dt><dd id="r-token">5412 •••• •••• 8830</dd>
+      </dl>
+      <div class="anchor" id="a-demo"></div>
+      <div class="limit" id="d-limit">
+        <span>Лимит без PIN-кода</span>
+        <span class="stepper"><button type="button" id="lim-dn" aria-label="Уменьшить лимит">−</button><output id="lim">3 000 ₽</output><button type="button" id="lim-up" aria-label="Увеличить лимит">+</button></span>
+      </div>
+      <div id="d-res" hidden>
+        <dl class="kv">
+          <dt>Сумма</dt><dd id="r-amt">1 250 ₽</dd>
+          <dt>Криптограмма</dt><dd id="r-cry">A3F9 0C17 7E2B</dd>
+          <dt>Время</dt><dd id="r-time">0,31 с</dd>
+          <dt>Номер карты</dt><dd class="ok">не передавался</dd>
+        </dl>
+        <p class="note" id="r-note" hidden>Сумма выше лимита, поэтому терминал попросит PIN-код. Он проверяется в зашифрованном виде и не хранится в терминале.</p>
+      </div>
+      <button class="btn btn-solid btn-px btn-wide" id="tap" type="button"><span>Приложить к терминалу</span></button>
+    </div>
+  </section>
+
+  <section class="band paper reviews" id="reviews">
+    <canvas class="edge"></canvas>
+    <p class="rv-h">Что говорят те, кто уже платит касанием</p>
+    <article class="rv" style="left:8%;top:calc(var(--vh)*42)" data-k="0.35"><p>Оплачиваю метро и кофе одним касанием. Не помню, когда последний раз доставал наличные.</p><cite>Анна К.</cite></article>
+    <article class="rv" style="right:9%;top:calc(var(--vh)*70)" data-k="0.6"><p>Потерял карту в такси. Заморозил в приложении за пять секунд, ещё до того как вышел из машины.</p><cite>Илья М.</cite></article>
+    <article class="rv" style="left:3%;top:calc(var(--vh)*118)" data-k="0.5"><p>Нравится, что продавец не видит номер карты. Каждая покупка идёт под своим кодом.</p><cite>Марина С.</cite></article>
+    <article class="rv" style="right:4%;top:calc(var(--vh)*150)" data-k="0.3"><p>Уведомление приходит раньше, чем терминал печатает чек.</p><cite>Денис Р.</cite></article>
+    <article class="rv" style="left:13%;top:calc(var(--vh)*200)" data-k="0.45"><p>Для подписок завёл виртуальную карту с лимитом. Больше никаких внезапных списаний.</p><cite>Ольга В.</cite></article>
+    <article class="rv" style="right:14%;top:calc(var(--vh)*232)" data-k="0.55"><p>Карта тяжёлая, с рельефом, приятно держать в руке. Друзья всё время просят посмотреть.</p><cite>Тимур А.</cite></article>
+  </section>
+
+  <section class="band ink faq" id="faq">
+    <canvas class="edge"></canvas>
+    <div class="faq-grid">
+      <div class="faq-side">
+        <h2 class="px h-l" data-scramble>Перед первой&#10;оплатой</h2>
+        <p class="lead">Коротко о том, как NOIR защищает деньги и данные.</p>
+      </div>
+      <div class="faq-list">
+        <div class="qa"><h3>Что такое NOIR?</h3><p>Бесконтактная платёжная карта и приложение к ней. Платить можно картой, телефоном или часами в любом терминале с NFC, а лимиты, уведомления и заморозка настраиваются в приложении.</p></div>
+        <div class="qa"><h3>Можно ли списать деньги, пройдя мимо с терминалом?</h3><p>Практически нет. NFC работает на расстоянии до 4 см, а терминал должен быть зарегистрирован в платёжной системе. Каждая операция сразу видна в приложении, и любую можно оспорить.</p></div>
+        <div class="qa"><h3>Что видит продавец?</h3><p>Только токен, сумму и одноразовую криптограмму. Реальный номер карты, срок действия и CVV в терминал не передаются.</p></div>
+        <div class="qa"><h3>Что будет, если карту украдут?</h3><p>Заморозьте её в приложении одним касанием, и платежи остановятся сразу. Когда карта найдётся, её можно разморозить. Покупку выше лимита без PIN-кода вор провести не сможет.</p></div>
+        <div class="qa"><h3>Где хранятся мои данные?</h3><p>Платёжные ключи записаны в защищённый элемент чипа и не покидают его. Приложение хранит данные в зашифрованном виде и при входе просит Face ID или код.</p></div>
+        <div class="qa"><h3>Есть ли лимит на оплату без PIN-кода?</h3><p>Да. По умолчанию 3 000 ₽, его можно уменьшить или увеличить в приложении. Всё, что выше лимита, подтверждается PIN-кодом.</p></div>
+        <div class="qa"><h3>Работает ли карта за границей?</h3><p>Да, в любой стране, где терминалы принимают бесконтактную оплату. Курс и итоговую сумму приложение показывает сразу после покупки.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band paper cta" id="cta">
+    <canvas class="edge"></canvas>
+    <div class="anchor" id="a-cta" data-rx="-0.04" data-ry="0.06"></div>
+    <h2 class="px h-xl" data-scramble>Начни платить&#10;касанием</h2>
+    <div class="cta-btns">
+      <a class="btn btn-solid" href="#try"><span>Заказать карту</span></a>
+      <a class="btn btn-out" href="#faq"><span>Сравнить тарифы</span></a>
+    </div>
+    <p class="note">Доставка курьером за один день. Выпуск бесплатный.</p>
+  </section>
+
+  <footer class="band ink foot">
+    <canvas class="edge"></canvas>
+    <div class="foot-row">
+      <span>© 2026 NOIR</span>
+      <nav aria-label="Документы"><a href="#faq">Конфиденциальность</a><a href="#faq">Условия</a><a href="#cta">Тарифы</a></nav>
+    </div>
+    <canvas id="mark" aria-label="NOIR"></canvas>
+  </footer>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js"></script>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const FINE = matchMedia('(pointer: fine)').matches;
+const css = getComputedStyle(document.documentElement);
+const COL = {
+  ink: css.getPropertyValue('--ink').trim(),
+  paper: css.getPropertyValue('--paper').trim(),
+  signal: css.getPropertyValue('--signal').trim(),
+  signalHi: css.getPropertyValue('--signal-hi').trim(),
+};
+
+/* ================= viewport ================= */
+let V = innerHeight, VW = innerWidth;
+const setVH = () => document.documentElement.style.setProperty('--vh', (innerHeight * 0.01) + 'px');
+setVH();
+
+/* ================= smooth scroll ================= */
+let lenis = null;
+if (!REDUCE && window.Lenis) {
+  lenis = new Lenis({ lerp: 0.085, smoothWheel: true, wheelMultiplier: 0.9 });
+  $$('a[href^="#"]').forEach(a => a.addEventListener('click', e => {
+    const id = a.getAttribute('href');
+    const el = id.length > 1 ? $(id) : null;
+    if (!el && id !== '#top') return;
+    e.preventDefault();
+    lenis.scrollTo(id === '#top' ? 0 : el, { duration: 2.2 });
+  }));
+}
+
+/* ================= text scramble ================= */
+const GLYPHS = 'АБВГДЕЖЗИКЛМНОПРСТУФХЦЧШЩЫЭЮЯ0123456789#$%&*+=/<>?';
+const rnd = () => GLYPHS[(Math.random() * GLYPHS.length) | 0];
+function scramble(el, text, dur = 950) {
+  if (el._raf) cancelAnimationFrame(el._raf);
+  if (REDUCE) { el.textContent = text; return; }
+  const from = el.textContent;
+  const q = [];
+  for (let i = 0; i < text.length; i++) {
+    const s = Math.random() * dur * 0.45;
+    q.push({ a: from[i] || '', b: text[i], s, e: s + dur * 0.25 + Math.random() * dur * 0.3 });
+  }
+  const t0 = performance.now();
+  let last = 0;
+  const tick = now => {
+    const t = now - t0;
+    if (now - last > 45 || t >= dur) {
+      last = now;
+      let out = '';
+      for (const c of q) {
+        if (c.b === '\n' || c.b === ' ') out += c.b;
+        else if (t >= c.e) out += c.b;
+        else if (t >= c.s) out += rnd();
+        else out += (c.a && c.a !== '\n' && c.a !== ' ') ? c.a : rnd();
+      }
+      el.textContent = out;
+    }
+    if (t < dur) el._raf = requestAnimationFrame(tick);
+    else el.textContent = text;
+  };
+  el._raf = requestAnimationFrame(tick);
+}
+$$('[data-scramble]').forEach(el => { el.dataset.text = el.textContent; });
+const io = new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting) scramble(e.target, e.target.dataset.text);
+}), { threshold: 0.6 });
+$$('[data-scramble]').forEach(el => io.observe(el));
+
+/* ================= pixel-dissolve seams ================= */
+const edges = $$('.edge').map(cv => {
+  const band = cv.parentElement;
+  return { cv, band, ctx: cv.getContext('2d'), color: getComputedStyle(band).backgroundColor, seeds: [], last: -1 };
+});
+function layoutEdges() {
+  const cols = VW < 700 ? 18 : 44, rows = 4;
+  const cell = VW / cols;
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  edges.forEach(ed => {
+    ed.cols = cols; ed.rows = rows; ed.cell = cell;
+    ed.cv.width = Math.round(VW * dpr); ed.cv.height = Math.round(rows * cell * dpr);
+    ed.cv.style.width = '100%'; ed.cv.style.height = rows * cell + 'px';
+    ed.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ed.seeds = Array.from({ length: cols * rows }, () => Math.random());
+    ed.last = -1;
+  });
+}
+function drawEdges() {
+  for (const ed of edges) {
+    const top = ed.band.getBoundingClientRect().top;
+    if (top < -ed.cell * 6 || top > V + ed.cell * 6) continue;
+    const p = clamp((V - top) / (V * 0.75), 0, 1);
+    const q = Math.round(p * 80);
+    if (q === ed.last) continue;
+    ed.last = q;
+    const { ctx, cols, rows, cell } = ed;
+    ctx.clearRect(0, 0, cols * cell, rows * cell);
+    ctx.fillStyle = ed.color;
+    for (let r = 0; r < rows; r++) {
+      const k = rows - 1 - r; // k=0 touches the band
+      const thr = clamp(p * 1.7 - k * 0.3 - (k === 3 ? 0.2 : 0) - 0.04, 0, 1);
+      for (let c = 0; c < cols; c++) {
+        if (ed.seeds[r * cols + c] < thr) ctx.fillRect(c * cell, r * cell, cell + 0.5, cell + 0.5);
+      }
+    }
+  }
+}
+
+/* ================= pixel cursor trail ================= */
+const trail = { cv: $('#trail'), cells: [], on: FINE && !REDUCE };
+trail.ctx = trail.cv.getContext('2d');
+function sizeTrail() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  trail.cv.width = VW * dpr; trail.cv.height = V * dpr;
+  trail.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+let lastSpawn = { x: -99, y: -99 };
+if (trail.on) addEventListener('pointermove', e => {
+  const G = 12;
+  const gx = Math.floor(e.clientX / G) * G, gy = Math.floor(e.clientY / G) * G;
+  if (gx === lastSpawn.x && gy === lastSpawn.y) return;
+  lastSpawn = { x: gx, y: gy };
+  trail.cells.push({ x: gx, y: gy, t: performance.now() });
+  if (Math.random() < 0.55) trail.cells.push({ x: gx + (Math.random() < .5 ? -G : G), y: gy + (Math.random() < .5 ? -G : G), t: performance.now() - 120 });
+  if (trail.cells.length > 60) trail.cells.splice(0, trail.cells.length - 60);
+}, { passive: true });
+function drawTrail(now) {
+  if (!trail.on) return;
+  const ctx = trail.ctx;
+  ctx.clearRect(0, 0, VW, V);
+  trail.cells = trail.cells.filter(c => now - c.t < 520);
+  for (const c of trail.cells) {
+    const a = 1 - (now - c.t) / 520;
+    ctx.fillStyle = `rgba(255,255,255,${(a * 0.9).toFixed(3)})`;
+    ctx.fillRect(c.x, c.y, 12, 12);
+  }
+}
+
+/* ================= pixel hover fill on buttons ================= */
+$$('.btn').forEach(btn => {
+  const cv = document.createElement('canvas');
+  btn.prepend(cv);
+  const ctx = cv.getContext('2d');
+  let order = [], raf = 0, fill = 0, target = 0, cols = 0, rows = 0, G = 9, w = 0, h = 0;
+  const setup = () => {
+    const r = btn.getBoundingClientRect(); w = r.width; h = r.height;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    cv.width = w * dpr; cv.height = h * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cols = Math.ceil(w / G); rows = Math.ceil(h / G);
+    order = Array.from({ length: cols * rows }, (_, i) => i).sort(() => Math.random() - 0.5);
+  };
+  const color = () => btn.classList.contains('btn-solid') ? COL.signal : getComputedStyle(btn).color;
+  const draw = () => {
+    fill += (target - fill) * (REDUCE ? 1 : 0.16);
+    if (Math.abs(target - fill) < 0.004) fill = target;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = color();
+    const n = Math.round(order.length * fill);
+    for (let i = 0; i < n; i++) { const k = order[i]; ctx.fillRect((k % cols) * G, ((k / cols) | 0) * G, G + .5, G + .5); }
+    if (fill !== target) raf = requestAnimationFrame(draw); else raf = 0;
+  };
+  const go = t => { if (!cols) setup(); target = t; if (!raf) raf = requestAnimationFrame(draw); };
+  btn.addEventListener('pointerenter', () => go(1));
+  btn.addEventListener('pointerleave', () => go(0));
+  btn.addEventListener('focus', () => go(1));
+  btn.addEventListener('blur', () => go(0));
+  addEventListener('resize', () => { cols = 0; });
+});
+
+/* ================= pixel icons (floating) ================= */
+const ICONS = {
+  wave: [
+    '.....11....', '......11...', '..11...11..', '...11...1..', '....11..11.',
+    '1....1...1.', '....11..11.', '...11...1..', '..11...11..', '......11...', '.....11....'],
+};
+function drawIcon(cv, kind, t = 0) {
+  const ctx = cv.getContext('2d');
+  const S = 64;
+  if (!cv.width) { cv.width = S * 2; cv.height = S * 2; cv.style.width = 'clamp(48px,5vw,76px)'; cv.style.height = 'clamp(48px,5vw,76px)'; }
+  ctx.setTransform(2, 0, 0, 2, 0, 0);
+  ctx.clearRect(0, 0, S, S);
+  ctx.fillStyle = COL.ink;
+  if (kind === 'wave') {
+    const g = ICONS.wave, n = g.length, c = Math.floor(S / (n + 1));
+    const off = (S - c * n) / 2;
+    g.forEach((row, y) => [...row].forEach((v, x) => { if (v === '1') ctx.fillRect(off + x * c, off + y * c, c - 1, c - 1); }));
+  } else {
+    const dots = 16, R = S * 0.36, c = S / 16;
+    for (let i = 0; i < dots; i++) {
+      const a = (i / dots) * Math.PI * 2 + t;
+      const x = S / 2 + Math.cos(a) * R * 0.62, y = S / 2 + Math.sin(a) * R;
+      ctx.globalAlpha = 0.35 + 0.65 * ((i / dots + t * 0.15) % 1);
+      ctx.fillRect(Math.round(x - c / 2), Math.round(y - c / 2), c, c);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+const floaters = $$('.floater');
+floaters.forEach(f => drawIcon(f, f.dataset.icon));
+
+/* ================= footer wordmark ================= */
+const MARK = {
+  N: ['1...1', '11..1', '11..1', '1.1.1', '1..11', '1..11', '1...1'],
+  O: ['.111.', '1...1', '1...1', '1...1', '1...1', '1...1', '.111.'],
+  I: ['111', '.1.', '.1.', '.1.', '.1.', '.1.', '111'],
+  R: ['1111.', '1...1', '1...1', '1111.', '1.1..', '1..1.', '1...1'],
+};
+const mark = { cv: $('#mark'), vis: false, mx: -1e4, my: -1e4 };
+mark.ctx = mark.cv.getContext('2d');
+function layoutMark() {
+  const word = 'NOIR';
+  const grid = [];
+  const totalCols = word.split('').reduce((s, ch) => s + MARK[ch][0].length, 0) + (word.length - 1) + 2;
+  const rows = 9;
+  for (let r = 0; r < rows; r++) grid.push(new Array(totalCols).fill(0));
+  let x = 1;
+  for (const ch of word) {
+    const g = MARK[ch];
+    g.forEach((row, y) => [...row].forEach((v, i) => { if (v === '1') grid[y + 1][x + i] = 1; }));
+    x += g[0].length + 1;
+  }
+  const w = mark.cv.clientWidth || VW;
+  const cell = w / totalCols;
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  mark.cv.width = w * dpr; mark.cv.height = cell * rows * dpr;
+  mark.cv.style.height = cell * rows + 'px';
+  mark.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  Object.assign(mark, { grid, cols: totalCols, rows, cell, seed: grid.map(r => r.map(() => Math.random())) });
+}
+function drawMark(now) {
+  if (!mark.vis || !mark.grid) return;
+  const { ctx, grid, cols, rows, cell, seed } = mark;
+  const t = now * 0.001;
+  ctx.fillStyle = COL.ink;
+  ctx.fillRect(0, 0, cols * cell, rows * cell);
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const s = seed[r][c];
+    const cx = c * cell + cell / 2, cy = r * cell + cell / 2;
+    const d = Math.hypot(cx - mark.mx, cy - mark.my) / (cell * 2.2);
+    const near = Math.max(0, 1 - d);
+    let l;
+    if (grid[r][c]) l = 0.15 + s * 0.05 + 0.025 * Math.sin(t * 1.3 + s * 9) + near * 0.22;
+    else l = 0.075 + s * 0.022 + near * 0.05;
+    ctx.fillStyle = `hsl(228 12% ${(l * 100).toFixed(1)}%)`;
+    ctx.fillRect(c * cell, r * cell, cell + 0.6, cell + 0.6);
+  }
+}
+new IntersectionObserver(es => { mark.vis = es[0].isIntersecting; }).observe(mark.cv);
+mark.cv.addEventListener('pointermove', e => { const r = mark.cv.getBoundingClientRect(); mark.mx = e.clientX - r.left; mark.my = e.clientY - r.top; });
+mark.cv.addEventListener('pointerleave', () => { mark.mx = mark.my = -1e4; });
+
+/* ================= WebGL card ================= */
+const CW = 1000, CH = 630, CT = 16, CR = 42, BEV = 2.6;
+const canvas = $('#gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.setClearColor(0x000000, 0);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+const scene = new THREE.Scene();
+const FOV = 26;
+const camera = new THREE.PerspectiveCamera(FOV, VW / V, 10, 20000);
+function sizeGL() {
+  renderer.setSize(VW, V, false);
+  camera.aspect = VW / V;
+  camera.position.set(0, 0, (V / 2) / Math.tan(THREE.MathUtils.degToRad(FOV / 2)));
+  camera.updateProjectionMatrix();
+}
+sizeGL();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.03).texture;
+const key = new THREE.PointLight(0xffffff, 1.5, 0, 0);
+key.position.set(-400, 600, 900);
+scene.add(key);
+const rim = new THREE.PointLight(0xc9d4ff, 0.7, 0, 0);
+rim.position.set(800, -300, 600);
+scene.add(rim);
+
+try { await Promise.race([Promise.all([document.fonts.load('80px "Tiny5"'), document.fonts.load('500 40px "JetBrains Mono"'), document.fonts.load('400 20px "JetBrains Mono"')]), new Promise(r => setTimeout(r, 2500))]); } catch (e) {}
+
+const CHIP = { x: 92, y: 244, w: 120, h: 92 };          // texture space (y down)
+const TAPC = { x: 262, y: 290 };                           // contactless mark centre
+function frontTexture() {
+  const W = 2048, H = Math.round(W * CH / CW), u = W / CW;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const bg = g.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#1b1c22'); bg.addColorStop(0.55, '#131419'); bg.addColorStop(1, '#17181e');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  // faint ripple rings drawn into colour so they read even in flat light
+  for (let r = 13; r < 1250; r += 13) {
+    const a = 0.035 * Math.exp(-r / 420);
+    if (a < 0.002) break;
+    g.strokeStyle = `rgba(255,255,255,${a.toFixed(4)})`; g.lineWidth = 1.6 * u;
+    g.beginPath(); g.arc(TAPC.x * u, TAPC.y * u, r * u, 0, Math.PI * 2); g.stroke();
+  }
+  // grain
+  const img = g.getImageData(0, 0, W, H), d = img.data;
+  for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - 0.5) * 6; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
+  g.putImageData(img, 0, 0);
+  // EMV chip
+  const cx = CHIP.x * u, cy = CHIP.y * u, cw = CHIP.w * u, ch = CHIP.h * u;
+  const mg = g.createLinearGradient(cx, cy, cx + cw, cy + ch);
+  mg.addColorStop(0, '#b9bcc4'); mg.addColorStop(0.45, '#7d808a'); mg.addColorStop(0.7, '#a6a9b2'); mg.addColorStop(1, '#6f727c');
+  g.fillStyle = mg; g.beginPath(); g.roundRect(cx, cy, cw, ch, 14 * u); g.fill();
+  g.strokeStyle = 'rgba(20,21,26,.75)'; g.lineWidth = 2.4 * u; g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(cx + cw * 0.5, cy + 4 * u); g.lineTo(cx + cw * 0.5, cy + ch * 0.3);
+  g.moveTo(cx + cw * 0.5, cy + ch * 0.7); g.lineTo(cx + cw * 0.5, cy + ch - 4 * u);
+  [0.34, 0.66].forEach(f => { g.moveTo(cx + 4 * u, cy + ch * f); g.lineTo(cx + cw * 0.3, cy + ch * f); g.moveTo(cx + cw * 0.7, cy + ch * f); g.lineTo(cx + cw - 4 * u, cy + ch * f); });
+  g.stroke();
+  g.beginPath(); g.roundRect(cx + cw * 0.3, cy + ch * 0.3, cw * 0.4, ch * 0.4, 8 * u); g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 1.2 * u;
+  g.beginPath(); g.roundRect(cx + 1 * u, cy + 1 * u, cw - 2 * u, ch - 2 * u, 13 * u); g.stroke();
+  // engraved marks
+  const engrave = (draw) => {
+    g.save(); g.translate(0, 2.4 * u); g.fillStyle = g.strokeStyle = 'rgba(0,0,0,.55)'; draw(); g.restore();
+    g.save(); g.translate(0, -1.2 * u); g.fillStyle = g.strokeStyle = 'rgba(255,255,255,.08)'; draw(); g.restore();
+    g.fillStyle = g.strokeStyle = '#555967'; draw();
+  };
+  engrave(() => {
+    g.lineWidth = 5 * u; g.lineCap = 'round';
+    [17, 29, 41, 53].forEach(r => { g.beginPath(); g.arc(TAPC.x * u, TAPC.y * u, r * u, -0.78, 0.78); g.stroke(); });
+  });
+  engrave(() => { g.font = `${44 * u}px Tiny5, monospace`; g.textAlign = 'right'; g.textBaseline = 'top'; g.fillText('NOIR', 946 * u, 64 * u); });
+  engrave(() => { g.font = `500 ${40 * u}px "JetBrains Mono", monospace`; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillText('•••• 4729', 64 * u, 552 * u); });
+  engrave(() => { g.font = `${17 * u}px "JetBrains Mono", monospace`; g.textAlign = 'right'; g.textBaseline = 'alphabetic'; g.fillText('NFC · 13,56 MHz', 946 * u, 552 * u); });
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+function normalTexture() {
+  const W = 1024, H = Math.round(W * CH / CW), u = W / CW;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const img = g.createImageData(W, H), d = img.data;
+  const K = Math.PI * 2 / 13;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const px = x / u - TAPC.x, py = y / u - TAPC.y;
+    const r = Math.hypot(px, py) + 1e-3;
+    let nx = 0, ny = 0;
+    if (r > 60) {
+      const slope = Math.cos(r * K) * K * 0.55 * Math.exp(-r / 340);
+      nx = -slope * px / r; ny = slope * py / r;
+    }
+    const inChip = x / u > CHIP.x && x / u < CHIP.x + CHIP.w && y / u > CHIP.y && y / u < CHIP.y + CHIP.h;
+    if (inChip) { nx = 0; ny = 0; }
+    const len = Math.hypot(nx, ny, 1);
+    const i = (y * W + x) * 4;
+    d[i] = 128 + 127 * nx / len; d[i + 1] = 128 + 127 * ny / len; d[i + 2] = 128 + 127 / len; d[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.NoColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+function roughTexture() {
+  // G = roughness, B = metalness
+  const W = 512, H = Math.round(W * CH / CW), u = W / CW;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgb(0,128,40)'; g.fillRect(0, 0, W, H);
+  g.fillStyle = 'rgb(0,70,235)'; g.beginPath(); g.roundRect(CHIP.x * u, CHIP.y * u, CHIP.w * u, CHIP.h * u, 14 * u); g.fill();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.NoColorSpace;
+  return t;
+}
+const U = {
+  uTime: { value: 0 },
+  uPulse: { value: 0 },
+  uPulseAmp: { value: 0 },
+  uSig: { value: new THREE.Color(COL.signal) },
+  uSigHi: { value: new THREE.Color(COL.signalHi) },
+  uBack: { value: new THREE.Color('#121318') },
+  uEdge: { value: new THREE.Color(COL.signal).multiplyScalar(1.15) },
+  uGlowAmt: { value: 1 },
+};
+const rmTex = roughTexture();
+const material = new THREE.MeshPhysicalMaterial({
+  color: 0xffffff, map: frontTexture(), normalMap: normalTexture(), normalScale: new THREE.Vector2(0.5, 0.5),
+  roughnessMap: rmTex, roughness: 1, metalnessMap: rmTex, metalness: 1,
+  clearcoat: 0.4, clearcoatRoughness: 0.3, envMapIntensity: 0.3,
+});
+material.onBeforeCompile = sh => {
+  Object.assign(sh.uniforms, U);
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', `#include <common>
+      attribute float aGlow; attribute float aFront; attribute vec2 aCard;
+      varying float vGlow; varying float vFront; varying vec2 vCard; varying float vZ;`)
+    .replace('#include <uv_vertex>', `#include <uv_vertex>
+      vGlow = aGlow; vFront = aFront; vCard = aCard; vZ = position.z;`);
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', `#include <common>
+      uniform float uTime, uPulse, uPulseAmp, uGlowAmt;
+      uniform vec3 uSig, uSigHi, uBack, uEdge;
+      varying float vGlow; varying float vFront; varying vec2 vCard; varying float vZ;
+      float sdRB(vec2 p, vec2 b, float r){ vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }
+      // x: antenna line mask, y: antenna brightness, z: ripple glow
+      vec3 antenna(vec2 uv){
+        vec2 p = uv * vec2(${CW}.0, ${CH}.0) - vec2(${CW / 2}.0, ${CH / 2}.0);
+        vec2 tap = vec2(${TAPC.x - CW / 2}.0, ${CH / 2 - TAPC.y}.0);
+        float cy = ${CH / 2 - (CHIP.y + CHIP.h / 2)}.0;
+        float chipL = ${CHIP.x - CW / 2}.0;
+        float ang = atan(p.y * 1.587, p.x) / 6.2831853 + 0.5;
+        float r = length(p - tap);
+        float R = uPulse * 1300.0 - 80.0;
+        float ring = exp(-pow((r - R) / 60.0, 2.0)) * uPulseAmp;
+        float line = 0.0, bright = 0.0;
+        for (int k = 0; k < 4; k++) {
+          float fk = float(k);
+          float ins = 26.0 + fk * 10.5;
+          float d = sdRB(p, vec2(${CW / 2}.0 - ins, ${CH / 2}.0 - ins), max(40.0 - ins * 0.55, 8.0));
+          float l = 1.0 - smoothstep(0.8, 2.0, abs(d));
+          float gap = step(p.x, -380.0) * (1.0 - step(24.0, abs(p.y - cy)));
+          l *= 1.0 - gap;
+          float yk = cy + (fk - 1.5) * 10.5;
+          float lead = (1.0 - smoothstep(0.8, 2.0, abs(p.y - yk))) * step(-(${CW / 2}.0 - ins) - 1.0, p.x) * step(p.x, chipL + 2.0);
+          float c = fract(ang - uTime * 0.065 + fk * 0.018);
+          float comet = exp(-c * 22.0) + 0.6 * exp(-fract(c + 0.5) * 30.0);
+          line = max(line, max(l, lead));
+          bright = max(bright, l * (0.16 + 1.0 * comet) + lead * 0.3);
+        }
+        bright += line * ring * 2.4;
+        float rip = (0.5 + 0.5 * cos(6.2831853 * r / 13.0)) * exp(-r / 700.0) * step(60.0, r);
+        return vec3(line, bright, ring * rip * 0.55 + ring * 0.05);
+      }`)
+    .replace('#include <map_fragment>', `#include <map_fragment>
+      vec3 ant = vec3(0.0);
+      if (vFront > 0.5) {
+        ant = antenna(vCard);
+        diffuseColor.rgb = mix(diffuseColor.rgb, uSig * 0.22, ant.x * 0.7);
+      } else {
+        diffuseColor.rgb = uBack;
+      }`)
+    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      totalEmissiveRadiance += (mix(uSig, uSigHi, clamp(ant.y - 0.9, 0.0, 1.0)) * ant.y * 1.35 + uSigHi * ant.z) * uGlowAmt;
+      if (vFront < 0.5) {
+        float core = 1.0 - smoothstep(0.0, ${(CT * 0.42).toFixed(2)}, abs(vZ));
+        totalEmissiveRadiance += uEdge * vGlow * (0.45 + 1.1 * core);
+      }`);
+};
+
+function tileShape(x0, y0, x1, y1, k) {
+  const s = new THREE.Shape(), r = CR;
+  const bl = k.bl ? r : 0, br = k.br ? r : 0, tr = k.tr ? r : 0, tl = k.tl ? r : 0;
+  s.moveTo(x0 + bl, y0);
+  s.lineTo(x1 - br, y0); if (br) s.absarc(x1 - br, y0 + br, br, -Math.PI / 2, 0, false);
+  s.lineTo(x1, y1 - tr); if (tr) s.absarc(x1 - tr, y1 - tr, tr, 0, Math.PI / 2, false);
+  s.lineTo(x0 + tl, y1); if (tl) s.absarc(x0 + tl, y1 - tl, tl, Math.PI / 2, Math.PI, false);
+  s.lineTo(x0, y0 + bl); if (bl) s.absarc(x0 + bl, y0 + bl, bl, Math.PI, Math.PI * 1.5, false);
+  return s;
+}
+function buildGeo(x0, y0, x1, y1, k) {
+  const depth = CT - BEV * 2;
+  const geo = new THREE.ExtrudeGeometry(tileShape(x0, y0, x1, y1, k), {
+    depth, bevelEnabled: true, bevelThickness: BEV, bevelSize: BEV, bevelOffset: -BEV, bevelSegments: 4, curveSegments: 14,
+  });
+  geo.computeVertexNormals();
+  const pos = geo.attributes.position, nor = geo.attributes.normal, n = pos.count;
+  const glow = new Float32Array(n), front = new Float32Array(n), card = new Float32Array(n * 2);
+  const hx = CW / 2, hy = CH / 2;
+  for (let i = 0; i < n; i++) {
+    const x = pos.getX(i), y = pos.getY(i), nz = nor.getZ(i);
+    card[i * 2] = (x + hx) / CW; card[i * 2 + 1] = (y + hy) / CH;
+    if (nz > 0.92) front[i] = 1;
+    if (Math.abs(nz) < 0.92) {
+      const ax = Math.abs(x), ay = Math.abs(y);
+      const outer = ax > hx - 1.5 || ay > hy - 1.5 || (ax > hx - CR - 0.5 && ay > hy - CR - 0.5);
+      glow[i] = outer ? 0 : 1;
+    }
+  }
+  geo.setAttribute('aGlow', new THREE.BufferAttribute(glow, 1));
+  geo.setAttribute('aFront', new THREE.BufferAttribute(front, 1));
+  geo.setAttribute('aCard', new THREE.BufferAttribute(card, 2));
+  // uv for map/normalMap: card space on the front, a flat spot elsewhere
+  const uv = geo.attributes.uv;
+  for (let i = 0; i < n; i++) {
+    if (front[i]) uv.setXY(i, card[i * 2], card[i * 2 + 1]); else uv.setXY(i, 0.012, 0.5);
+  }
+  uv.needsUpdate = true;
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  geo.translate(-cx, -cy, -depth / 2);
+  return { geo, cx, cy };
+}
+
+function shadowTexture(w, h) {
+  const pad = 90, c = document.createElement('canvas');
+  const sc = 0.25;
+  c.width = (w + pad * 2) * sc; c.height = (h + pad * 2) * sc;
+  const g = c.getContext('2d');
+  g.shadowColor = 'rgba(0,0,0,1)'; g.shadowBlur = 46 * sc * 2; g.shadowOffsetX = 5000;
+  g.fillStyle = '#000';
+  g.beginPath(); g.roundRect(pad * sc - 5000, pad * sc, w * sc, h * sc, 30 * sc); g.fill();
+  const t = new THREE.CanvasTexture(c);
+  return { t, w: w + pad * 2, h: h + pad * 2 };
+}
+
+const root = new THREE.Group();
+scene.add(root);
+const whole = buildGeo(-CW / 2, -CH / 2, CW / 2, CH / 2, { tl: 1, tr: 1, bl: 1, br: 1 });
+const wholeMesh = new THREE.Mesh(whole.geo, material);
+root.add(wholeMesh);
+const tiles = [];
+const TW = CW / 3, TH = CH / 2;
+for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
+  const x0 = -CW / 2 + c * TW, y1 = CH / 2 - r * TH;
+  const g = buildGeo(x0, y1 - TH, x0 + TW, y1, { tl: c === 0 && r === 0, tr: c === 2 && r === 0, bl: c === 0 && r === 1, br: c === 2 && r === 1 });
+  const m = new THREE.Mesh(g.geo, material);
+  m.userData = { hx: g.cx, hy: g.cy, sx: Math.sign(c - 1), sy: r === 0 ? 1 : -1 };
+  m.visible = false;
+  root.add(m);
+  tiles.push(m);
+}
+const shW = shadowTexture(CW, CH), shT = shadowTexture(TW, TH);
+const shadowMat = (tex) => new THREE.MeshBasicMaterial({ map: tex, color: 0x0b0c10, transparent: true, depthWrite: false, opacity: 0 });
+const wholeShadow = new THREE.Mesh(new THREE.PlaneGeometry(shW.w, shW.h), shadowMat(shW.t));
+const tileShadows = tiles.map(() => new THREE.Mesh(new THREE.PlaneGeometry(shT.w, shT.h), shadowMat(shT.t)));
+[wholeShadow, ...tileShadows].forEach(s => { s.renderOrder = -1; s.visible = false; scene.add(s); });
+
+/* ================= choreography state ================= */
+const ANCH = { hero: $('#a-hero'), story: $('#a-story'), phone: $('#a-phone'), demo: $('#a-demo'), cta: $('#a-cta') };
+const WKEYS = ['hero', 'story', 'phone', 'demo', 'cta'];
+const S = { w: {}, frx: 0, fry: 0, frz: 0, split: 0, shadow: 0, tilt: 1, tiles: tiles.map(() => ({})) };
+const FX = { rx: 0, z: 0 };
+function resetState() {
+  Object.assign(S.w, { hero: 1, story: 0, phone: 0, demo: 0, cta: 0 });
+  Object.assign(S, { frx: 0, fry: 0, frz: 0, split: 0, shadow: 0, tilt: 1 });
+  S.tiles.forEach(t => Object.assign(t, { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }));
+}
+resetState();
+
+const phone = $('#phone');
+const t1 = $('#t1'), t2 = $('#t2'), t3 = $('#t3'), mineH = $('#mine-h');
+const slideH = $('#slide-h'), slideSub = $('#slide-sub');
+const SLIDES = [
+  { sub: 'Карта, телефон и часы работают с одного счёта', h: slideH.textContent },
+  { sub: 'Касание к терминалу на расстоянии до 4 см', h: 'NFC\n13,56 МГц' },
+  { sub: 'Для покупок в интернете есть одноразовые реквизиты', h: 'Виртуальные\nкарты' },
+];
+const reviews = $$('.rv');
+let tl = null, triggers = [], slideAt = [], curSlide = 0, prevTime = 0;
+
+function build() {
+  if (tl) tl.kill();
+  resetState();
+  V = innerHeight; VW = innerWidth;
+  const sy = scrollY;
+  const off = el => (el.getBoundingClientRect().top + sy) / V;
+  const hgt = el => el.offsetHeight / V;
+  const story = $('#story'), mine = $('#mine'), every = $('#everywhere'), tryS = $('#try'), rev = $('#reviews'), faq = $('#faq'), cta = $('#cta');
+  const sp = off(story), sEnd = sp + hgt(story) - 1;
+  const m0 = off(mine);
+  const e0 = off(every), eEnd = e0 + hgt(every) - 1;
+  const d0 = off(tryS);
+  const r0 = off(rev), rEnd = r0 + hgt(rev);
+  const f0 = off(faq);
+  const c0 = off(cta);
+  const ph = phone.offsetHeight;
+  const yHide = V + 60, yCenter = Math.max(70, (V - ph) / 2), yLow = V * 0.47, yLow2 = V * 0.43, yUp = -ph - 80;
+
+  gsap.set(phone, { y: yHide, autoAlpha: 0 });
+  gsap.set(t1, { y: 0, opacity: 1 });
+  gsap.set([t2, t3], { y: V * 0.55, opacity: 0 });
+  gsap.set(mineH, { opacity: 0 });
+  gsap.set(floaters, { opacity: 0, y: 0 });
+  gsap.set(reviews, { y: 0 });
+
+  tl = gsap.timeline({ paused: true, defaults: { ease: 'none' } });
+  const fade = (a, b, at, d, ease = 'power2.inOut') => {
+    tl.to(S.w, { [a]: 0, duration: d, ease }, at);
+    tl.to(S.w, { [b]: 1, duration: d, ease }, at);
+  };
+
+  /* hero -> story: card tips back and shrinks into the light band */
+  fade('hero', 'story', 0.04, sp - 0.1);
+  tl.to(S, { frx: 0.62, frz: -0.05, duration: 0.45, ease: 'sine.inOut' }, 0.04)
+    .to(S, { frx: 0, frz: 0, duration: 0.42, ease: 'sine.inOut' }, 0.52);
+  tl.to(S, { tilt: 0, duration: 0.3 }, 0);
+  tl.to(S, { shadow: 0.34, duration: 0.35 }, sp - 0.45);
+
+  /* story: split -> scatter -> drift -> regroup three -> tilt */
+  const a = sp;
+  const sAnchorW = ANCH.story.offsetWidth || 400;
+  const ls = CW / sAnchorW; // screen px -> card units at the story anchor
+  const P = (fx, fy) => ({ x: fx * VW / 2 * ls, y: fy * V / 2 * ls });
+  const aOffY = (V / 2 - (ANCH.story.offsetTop + ANCH.story.offsetHeight / 2)) * ls;
+  const narrow = VW < 820;
+  const k = narrow ? 1.0 : 1, kB = narrow ? 1.4 : 1;
+  const A = [
+    { ...P(-0.40 * k, 0.30), z: 40, rx: 0.22, ry: -0.35, rz: 0.13 },
+    { ...P(0.08 * k, 0.40), z: -20, rx: -0.18, ry: 0.22, rz: -0.06 },
+    { ...P(0.44 * k, 0.30), z: 60, rx: 0.28, ry: 0.32, rz: 0.26 },
+    { ...P(-0.38 * k, -0.12), z: 10, rx: -0.12, ry: -0.28, rz: -0.03 },
+    { ...P(-0.06 * k, -0.20), z: 80, rx: 0.22, ry: 0.16, rz: 0.12 },
+    { ...P(0.40 * k, -0.14), z: 20, rx: -0.22, ry: -0.2, rz: 0.07 },
+  ].map((o, i) => ({ ...o, x: o.x - tiles[i].userData.hx, y: o.y - tiles[i].userData.hy - aOffY }));
+  const B = [
+    { ...P(-0.58 * kB, 1.05), z: 60, rx: 0.5, ry: -0.6, rz: 0.42 },
+    { ...P(0.22 * kB, 1.45), z: 0, rx: -0.3, ry: 0.5, rz: -0.2 },
+    { ...P(0.62 * kB, 1.2), z: 90, rx: 0.6, ry: 0.5, rz: 0.6 },
+    { ...P(-0.52 * kB, 0.02), z: 30, rx: -0.2, ry: -0.5, rz: -0.12 },
+    { ...P(-0.14 * kB, -0.85), z: 120, rx: 0.4, ry: 0.3, rz: 0.25 },
+    { ...P(0.50 * kB, -0.06), z: 40, rx: -0.35, ry: -0.35, rz: 0.18 },
+  ].map((o, i) => ({ ...o, x: o.x - tiles[i].userData.hx, y: o.y - tiles[i].userData.hy - aOffY }));
+  const C = [
+    { ...P(-1.5, 1.6), z: 0, rx: 1.4, ry: -1.1, rz: 1.2 },
+    { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 },
+    { ...P(1.5, 1.7), z: 0, rx: 1.2, ry: 1.3, rz: -1.1 },
+    { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 },
+    { ...P(0.4, -1.8), z: 0, rx: -1.3, ry: 0.9, rz: 1.4 },
+    { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 },
+  ];
+  tl.to(S, { split: 1, duration: 0.45, ease: 'power2.inOut' }, a + 0.28);
+  S.tiles.forEach((t, i) => {
+    tl.to(t, { ...A[i], duration: 0.75, ease: 'power2.inOut' }, a + 0.74);
+    tl.to(t, { ...B[i], duration: 1.4, ease: narrow ? 'power2.out' : 'sine.inOut' }, a + 1.5);
+    tl.to(t, { ...C[i], duration: 0.72, ease: 'power3.inOut' }, a + 2.92);
+  });
+  tl.to(S, { split: 0, duration: 0.6, ease: 'power2.inOut' }, a + 3.0);
+  tl.to(t1, { y: -0.64 * V, duration: 0.62, ease: 'power1.in' }, a + 1.05).to(t1, { opacity: 0, duration: 0.2 }, a + 1.47);
+  tl.to(t2, { y: 0, opacity: 1, duration: 0.5, ease: 'power2.out' }, a + (narrow ? 1.62 : 1.45))
+    .to(t2, { y: -0.64 * V, duration: 0.6, ease: 'power1.in' }, a + 2.4)
+    .to(t2, { opacity: 0, duration: 0.2 }, a + 2.8);
+  tl.to(t3, { y: 0, opacity: 1, duration: 0.5, ease: 'power2.out' }, a + 3.02);
+  tl.to(S, { frz: -0.46, frx: 0.44, fry: 0.12, duration: 0.85, ease: 'sine.inOut' }, a + 3.62);
+
+  /* story -> phone: missing tiles tumble back, card lands in the phone */
+  tl.set(phone, { autoAlpha: 1 }, sEnd - 0.02);
+  tl.to(phone, { y: yCenter, duration: 1.0, ease: 'power2.out' }, sEnd);
+  fade('story', 'phone', sEnd + 0.04, 0.94);
+  tl.to(S, { frz: 0, frx: 0, fry: 0, duration: 0.9, ease: 'power2.inOut' }, sEnd + 0.02);
+  tl.to(S, { shadow: 0, duration: 0.4 }, sEnd);
+  [0, 2, 4].forEach(i => tl.to(S.tiles[i], { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, duration: 0.85, ease: 'power3.out' }, sEnd + 0.12));
+
+  /* mine (dark): headline scrambles in, phone settles lower */
+  tl.to(mineH, { opacity: 1, duration: 0.2 }, m0 + 0.12);
+  tl.to(phone, { y: yLow, duration: 0.5, ease: 'power2.inOut' }, m0 + 0.06);
+
+  /* everywhere (light): three statements swap in place */
+  tl.to(phone, { y: yLow2, duration: 0.6, ease: 'sine.inOut' }, e0 - 0.45);
+  const fl1 = floaters.filter(f => f.dataset.slide === '1'), fl2 = floaters.filter(f => f.dataset.slide === '2');
+  [[fl1, e0 + 0.88], [fl2, e0 + 1.78]].forEach(([els, at]) => {
+    els.forEach((f, i) => {
+      const d = i ? 0.3 : 0.22;
+      tl.fromTo(f, { y: V * d }, { y: -V * (d + 0.18), duration: 1.15, ease: 'none', immediateRender: false }, at);
+      tl.to(f, { opacity: 1, duration: 0.18 }, at).to(f, { opacity: 0, duration: 0.18 }, at + 0.95);
+    });
+  });
+  slideAt = [e0 + 0.9, e0 + 1.8];
+  tl.to(phone, { y: yUp, duration: 1.0, ease: 'power2.in' }, eEnd - 0.15);
+
+  /* demo: the card slides out of the phone into the form */
+  fade('phone', 'demo', d0 - 1.0, 1.0);
+  tl.to(S, { frz: -0.28, frx: 0.5, duration: 0.5, ease: 'sine.inOut' }, d0 - 1.0)
+    .to(S, { frz: 0, frx: 0, duration: 0.5, ease: 'sine.inOut' }, d0 - 0.5);
+  tl.to(S, { tilt: 0.5, duration: 0.2 }, d0 - 0.25);
+  tl.set(phone, { autoAlpha: 0 }, d0 + 0.05);
+
+  /* reviews: phone rises again, card returns into it */
+  tl.set(phone, { y: yHide, autoAlpha: 1 }, r0 - 1.0);
+  tl.to(phone, { y: yCenter, duration: 0.9, ease: 'power2.out' }, r0 - 0.95);
+  tl.to(S, { tilt: 0, duration: 0.2 }, r0 - 1.0);
+  fade('demo', 'phone', r0 - 0.95, 0.9);
+  reviews.forEach(rv => {
+    const kk = parseFloat(rv.dataset.k) || 0.4;
+    tl.fromTo(rv, { y: kk * V }, { y: -kk * V, duration: rEnd - r0 + 1, ease: 'none', immediateRender: false }, r0 - 1);
+  });
+  tl.to(phone, { y: yUp, duration: 0.8, ease: 'power2.in' }, rEnd - 1.15);
+  tl.set(phone, { autoAlpha: 0 }, f0 + 0.1);
+
+  /* cta: card drops in from above */
+  tl.set(S, { frx: 0.95, frz: 0.32 }, c0 - 1.0);
+  fade('phone', 'cta', c0 - 1.0, 0.95, 'power2.out');
+  tl.to(S, { frx: 0, frz: 0, duration: 0.95, ease: 'power2.out' }, c0 - 0.999);
+  tl.to(S, { shadow: 0.34, duration: 0.3 }, c0 - 0.35);
+  tl.to(S, { tilt: 1, duration: 0.3 }, c0 - 0.3);
+  tl.to({}, { duration: 0.01 }, c0 + 3);
+
+  triggers = [
+    { at: a + 1.55, fn: f => f && scramble($('h2', t2), 'Каждый платёж\nпод новым ключом') },
+    { at: a + 3.1, fn: f => f && scramble($('h2', t3), 'Три слоя\nзащиты') },
+    { at: m0 + 0.14, fn: f => f && $$('p', mineH).forEach((p, i) => setTimeout(() => scramble(p, p.dataset.text), i * 260)) },
+  ];
+  prevTime = -1;
+  curSlide = -1;
+}
+
+function setSlide(i) {
+  if (i === curSlide) return;
+  curSlide = i;
+  slideSub.textContent = SLIDES[i].sub;
+  scramble(slideH, SLIDES[i].h, 800);
+}
+
+/* ================= pointer ================= */
+const ptr = { x: 0, y: 0, sx: 0, sy: 0 };
+addEventListener('pointermove', e => { ptr.x = e.clientX / VW * 2 - 1; ptr.y = e.clientY / V * 2 - 1; }, { passive: true });
+
+/* ================= demo ================= */
+const amount = $('#amount'), limOut = $('#lim'), tapBtn = $('#tap');
+let limit = 3000, demoDone = false;
+const fmt = n => n.toLocaleString('ru-RU').replace(/ /g, ' ');
+const parseAmt = () => parseInt(amount.value.replace(/\D/g, ''), 10) || 0;
+amount.addEventListener('input', () => {
+  const n = parseAmt();
+  amount.value = n ? fmt(Math.min(n, 9999999)) : '';
+});
+const setLim = v => { limit = clamp(v, 1000, 10000); limOut.textContent = fmt(limit) + ' ₽'; };
+$('#lim-dn').addEventListener('click', () => setLim(limit - 1000));
+$('#lim-up').addEventListener('click', () => setLim(limit + 1000));
+const hex = n => Array.from({ length: n }, () => '0123456789ABCDEF'[(Math.random() * 16) | 0]).join('');
+function pulse(amp = 1, dur = 1.15) {
+  gsap.killTweensOf(U.uPulse); gsap.killTweensOf(U.uPulseAmp);
+  U.uPulseAmp.value = amp;
+  gsap.fromTo(U.uPulse, { value: 0 }, { value: 1, duration: dur, ease: 'power1.inOut' });
+  gsap.to(U.uPulseAmp, { value: 0, duration: 0.35, delay: dur - 0.3 });
+}
+tapBtn.addEventListener('click', () => {
+  const head = $('#d-h'), step = $('#d-step');
+  if (demoDone) {
+    demoDone = false;
+    step.textContent = '1/2';
+    scramble(head, 'Настрой оплату');
+    $('#d-form').hidden = false; $('#d-limit').hidden = false;
+    $('#d-res').hidden = true; $('#d-res-top').hidden = true;
+    $('span', tapBtn).textContent = 'Приложить к терминалу';
+    return;
+  }
+  const amt = parseAmt() || 1250;
+  tapBtn.disabled = true;
+  gsap.timeline()
+    .to(FX, { rx: -0.5, z: 160, duration: 0.38, ease: 'power3.out' })
+    .to(FX, { rx: 0, z: 0, duration: 0.7, ease: 'power2.inOut' }, '+=0.45');
+  pulse(1.9, 1.0);
+  setTimeout(() => {
+    const pin = amt > limit;
+    demoDone = true;
+    tapBtn.disabled = false;
+    step.textContent = '2/2';
+    scramble(head, pin ? 'Нужен PIN-код' : 'Оплачено');
+    $('#r-token').textContent = `${4000 + ((Math.random() * 5999) | 0)} •••• •••• ${1000 + ((Math.random() * 8999) | 0)}`;
+    $('#r-amt').textContent = fmt(amt) + ' ₽';
+    $('#r-cry').textContent = `${hex(4)} ${hex(4)} ${hex(4)}`;
+    $('#r-time').textContent = '0,' + (24 + ((Math.random() * 14) | 0)) + ' с';
+    $('#r-note').hidden = !pin;
+    $('#d-form').hidden = true; $('#d-limit').hidden = true;
+    $('#d-res').hidden = false; $('#d-res-top').hidden = false;
+    $('span', tapBtn).textContent = 'Ещё раз';
+  }, 950);
+});
+
+/* ================= frame loop ================= */
+const tmpV = new THREE.Vector3();
+function anchorPose(el) {
+  const r = el.getBoundingClientRect();
+  return {
+    x: r.left + r.width / 2 - VW / 2,
+    y: V / 2 - (r.top + r.height / 2),
+    s: r.width / CW,
+    rx: parseFloat(el.dataset.rx || 0), ry: parseFloat(el.dataset.ry || 0),
+  };
+}
+let nextAutoPulse = 2.2;
+function frame() {
+  const now = performance.now();
+  const t = now / 1000;
+  U.uTime.value = t;
+
+  // drive choreography straight from scroll position (in viewport heights)
+  const time = clamp(scrollY / V, 0, tl.duration());
+  tl.time(time);
+  for (const tr of triggers) {
+    if (prevTime >= 0 && prevTime < tr.at && time >= tr.at) tr.fn(true);
+    if (prevTime >= 0 && prevTime >= tr.at && time < tr.at) tr.fn(false);
+  }
+  if (slideAt.length) setSlide(time < slideAt[0] ? 0 : time < slideAt[1] ? 1 : 2);
+  prevTime = time;
+
+  // blend anchors
+  let x = 0, y = 0, s = 0, arx = 0, ary = 0, sum = 0;
+  for (const k of WKEYS) {
+    const w = S.w[k];
+    if (w < 0.0005) continue;
+    const p = anchorPose(ANCH[k]);
+    x += p.x * w; y += p.y * w; s += p.s * w; arx += p.rx * w; ary += p.ry * w; sum += w;
+  }
+  if (sum > 0) { x /= sum; y /= sum; s /= sum; arx /= sum; ary /= sum; }
+
+  ptr.sx = lerp(ptr.sx, ptr.x, 0.06); ptr.sy = lerp(ptr.sy, ptr.y, 0.06);
+  const tilt = S.tilt * (REDUCE ? 0 : 1);
+  const idle = REDUCE ? 0 : 1;
+  root.position.set(x, y + Math.sin(t * 0.9) * 5 * s * tilt * idle, FX.z * s);
+  root.scale.setScalar(Math.max(s, 0.0001));
+  root.rotation.set(
+    arx + S.frx + FX.rx - ptr.sy * 0.2 * tilt,
+    ary + S.fry + ptr.sx * 0.3 * tilt + Math.sin(t * 0.55) * 0.02 * tilt * idle,
+    S.frz + Math.sin(t * 0.7) * 0.008 * tilt * idle
+  );
+  key.position.set(-400 + ptr.sx * 600, 600 - ptr.sy * 450, 900);
+
+  // tiles vs whole card
+  const gap = S.split > 0.012 ? 5 + S.split * 24 : 0;
+  let assembled = gap === 0;
+  if (assembled) for (const o of S.tiles) if (Math.abs(o.x) + Math.abs(o.y) + Math.abs(o.z) + Math.abs(o.rz) + Math.abs(o.rx) > 0.6) { assembled = false; break; }
+  wholeMesh.visible = assembled;
+  tiles.forEach((m, i) => {
+    m.visible = !assembled;
+    if (assembled) return;
+    const o = S.tiles[i], u = m.userData;
+    m.position.set(u.hx + u.sx * gap + o.x, u.hy + u.sy * gap + o.y, o.z + S.split * (i % 2 ? 6 : -4));
+    m.rotation.set(o.rx + S.split * (i % 3 - 1) * 0.04, o.ry, o.rz + S.split * ((i * 7) % 5 - 2) * 0.012);
+  });
+  root.updateMatrixWorld();
+
+  // soft shadows (only on light bands)
+  const sh = S.shadow;
+  const placeShadow = (shadow, mesh, rz) => {
+    shadow.visible = sh > 0.01 && mesh.visible;
+    if (!shadow.visible) return;
+    mesh.getWorldPosition(tmpV);
+    const kz = (camera.position.z + 120) / camera.position.z;
+    shadow.position.set(tmpV.x * kz, (tmpV.y - 46 * s) * kz, -120);
+    shadow.rotation.set(0, 0, rz);
+    shadow.scale.setScalar(s * (1 + Math.abs(root.rotation.x) * 0.15));
+    shadow.material.opacity = sh;
+  };
+  placeShadow(wholeShadow, wholeMesh, root.rotation.z);
+  tiles.forEach((m, i) => placeShadow(tileShadows[i], m, root.rotation.z + m.rotation.z));
+
+  // auto contactless pulse while hero or cta is on screen
+  if (!REDUCE && t > nextAutoPulse) {
+    nextAutoPulse = t + 3.6;
+    if (S.w.hero > 0.5 || S.w.cta > 0.5 || S.w.phone > 0.5) pulse(1, 1.2);
+  }
+
+  // floating ring icons animate
+  if (curSlide === 2) floaters.forEach(f => f.dataset.icon === 'ring' && drawIcon(f, 'ring', t * 0.8));
+
+  renderer.render(scene, camera);
+  drawEdges();
+  drawTrail(now);
+  drawMark(now);
+}
+
+/* ================= boot / resize ================= */
+layoutEdges(); sizeTrail(); layoutMark();
+build();
+if (lenis) {
+  gsap.ticker.add(time => { lenis.raf(time * 1000); frame(); });
+} else {
+  gsap.ticker.add(frame);
+}
+gsap.ticker.lagSmoothing(0);
+const h1 = $('h1[data-scramble]');
+if (h1) scramble(h1, h1.dataset.text, 1200);
+
+let rzT = 0, lastW = VW, lastH = V;
+addEventListener('resize', () => {
+  clearTimeout(rzT);
+  rzT = setTimeout(() => {
+    const w = innerWidth, h = innerHeight;
+    const major = w !== lastW || Math.abs(h - lastH) > 140;
+    VW = w; V = h;
+    sizeGL(); sizeTrail();
+    if (major) { lastW = w; lastH = h; setVH(); layoutEdges(); layoutMark(); requestAnimationFrame(build); }
+  }, 160);
+});
+document.fonts && document.fonts.ready.then(() => requestAnimationFrame(build));
+</script>
